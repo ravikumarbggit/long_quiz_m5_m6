@@ -175,6 +175,40 @@ resource "aws_lb_target_group_attachment" "ec2_attachment" {
   depends_on = [ aws_instance.my_instance ]
 }
 
+
+
+# IAM Role for CloudWatch Logs
+resource "aws_iam_role" "api_gateway_cw_role" {
+  name = "api_gateway_cloudwatch_logs_role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "apigateway.amazonaws.com"
+        }
+        Sid = ""
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "cw_policy" {  
+  role       = aws_iam_role.api_gateway_cw_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs"
+  
+}
+
+# API Gateway Account Settings
+resource "aws_api_gateway_account" "api_gateway_account" {
+  cloudwatch_role_arn = aws_iam_role.api_gateway_cw_role.arn
+}
+
+
+
 # API Gateway VPC Link
 resource "aws_apigatewayv2_vpc_link" "my_vpc_link" {
   name        = "my-vpc-link"
@@ -199,7 +233,7 @@ resource "aws_apigatewayv2_integration" "alb_integration" {
 
 resource "aws_apigatewayv2_route" "my_route" {
   api_id    = aws_apigatewayv2_api.my_api.id
-  route_key = "ANY /{proxy+}"
+  route_key = "ANY /default/{proxy+}"
   target    = "integrations/${aws_apigatewayv2_integration.alb_integration.id}"
 }
 
@@ -208,6 +242,9 @@ resource "aws_apigatewayv2_stage" "default_stage" {
   api_id      = aws_apigatewayv2_api.my_api.id
   name        = "default"
   auto_deploy = true
+  default_route_settings {
+    logging_level = "INFO"
+  }
 }
 
 output "api_endpoint" {
